@@ -3,23 +3,20 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppColors {
   // Brand
-  static const primary = Color(0xFF88A2FF); // pastel blue
-  static const primaryDark = Color(0xFF253A82); // deep royal blue
-  static const primaryLight = Color(0xFFC0E0FF); // light blue
-  static const primarySurface = Color(0xFFEAF1FF);
+  // Brand
+  static const primary = Color(0xFF006EE9);       // Blue Raspberry — main blue
+  static const primaryDark = Color(0xFF000181);   // Night Skies — deep navy
+  static const primaryLight = Color(0xFF83E7FF);  // Sunny Skies — light blue
+  static const primarySurface = Color(0xFFEAF6FF);
 
-  // Accent (success / adaptive correct)
-  static const green = Color(0xFFE3FC87);
+  // Accent (violet)
+  static const purple = Color(0xFFE8A0FF);        // Violet
+  static const purpleSurface = Color(0xFFF8EEFF);
+
+  // Accent (powdered lime)
+  static const green = Color(0xFFD0FFA4);         // Powdered Lime
   static const greenDark = Color(0xFF2D7A50);
-  static const greenSurface = Color(0xFFF0FAF5);
-
-  // Accent (info / AI insight)
-  static const purple = Color(0xFFAB9DFF);
-  static const purpleSurface = Color(0xFFEEEDFE);
-
-  // Pink Accent
-  static const pink = Color(0xFFFFB2F7);
-  static const pinkSurface = Color(0xFFFFEEFD);
+  static const greenSurface = Color(0xFFF5FFE8);
 
   // Neutral
   static const background = Color.fromARGB(255, 252, 252, 252);

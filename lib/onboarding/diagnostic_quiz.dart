@@ -324,7 +324,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
           value: _progress,
           minHeight: 6,
           backgroundColor: AppColors.border,
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryLight),
         ),
       ),
     );
@@ -404,7 +404,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
           ],
         ),
         const SizedBox(height: 4),
-        Text('Show your full working — AI will read and evaluate it',
+        Text('Show your full working in the whiteboard below to be evaluated',
             style: GoogleFonts.outfit(
                 fontSize: 12, color: AppColors.textSecondary)),
         const SizedBox(height: 12),
@@ -464,7 +464,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   ? const Color(0xFF4CAF50)
                   : _submitted
                       ? AppColors.border
-                      : AppColors.primary,
+                      : AppColors.primaryDark,
               width: 1.5,
             ),
             boxShadow: [

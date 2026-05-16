@@ -76,9 +76,9 @@ class _DiagnosticResultsState extends State<DiagnosticResults>
         };
       case DifficultyLevel.advanced:
         return {
-          'bg': AppColors.pinkSurface,
-          'text': AppColors.pink,
-          'border': AppColors.pink.withOpacity(0.4),
+          'bg': AppColors.primary,
+          'text': AppColors.primaryDark,
+          'border': AppColors.primaryLight.withOpacity(0.4),
         };
     }
   }
@@ -120,27 +120,15 @@ class _DiagnosticResultsState extends State<DiagnosticResults>
                   // Profile/Avatar Circle
                   ScaleTransition(
                     scale: _scaleAnim,
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.border, width: 1.5),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(50), 
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0), 
-                          child: Image.asset(
-                            AppAssets.chinguIcon,
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                      ),
+                    child: Center(
+                      child: Image.asset(
+                      AppAssets.chinguIcon,
+                      width: 160,
+                      height: 160,
+                      fit: BoxFit.contain,
+),
                     ),
                   ),
-                
                   const SizedBox(height: 24),
 
                   Text(

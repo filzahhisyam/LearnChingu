@@ -139,7 +139,7 @@ class LoginScreen extends StatelessWidget {
                         TextSpan(
                           text: 'Create an account',
                           style: TextStyle(
-                            color: AppColors.primaryDark,
+                            color: AppColors.purple,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
