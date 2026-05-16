@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:ui' as ui;
+import 'dart:typed_data';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +10,7 @@ import '../../theme/app_theme.dart';
 // ── Data ─────────────────────────────────────────────────────────────────────
 
 enum DifficultyLevel { beginner, intermediate, advanced }
+
 
 class DiagnosticQuestion {
   final String question;
@@ -73,6 +77,8 @@ class _WhiteboardPainter extends CustomPainter {
     }
   }
 
+  
+
   @override
   bool shouldRepaint(_WhiteboardPainter old) => true;
 }
@@ -88,6 +94,13 @@ class DiagnosticScreen extends StatefulWidget {
 
 class _DiagnosticScreenState extends State<DiagnosticScreen>
     with TickerProviderStateMixin {
+  
+  Color _strokeColor = Colors.black87;
+
+  final GlobalKey _whiteboardKey = GlobalKey();
+  String _recognizedText = '';
+  final TextEditingController _answerController =
+    TextEditingController();
   int _currentIndex = 0;
   bool _submitted = false;
   bool _evaluating = false;
@@ -103,7 +116,6 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   final List<_Stroke> _strokes = [];
   _Stroke? _currentStroke;
   double _strokeWidth = 3.0;
-  Color _strokeColor = Colors.black87;
 
   // Animation
   late AnimationController _slideController;
@@ -171,28 +183,124 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
-  Future<void> _submit() async {
-    if (!_hasDrawing) return;
-    setState(() {
-      _submitted = true;
-      _evaluating = true;
-    });
+Future<void> _submit() async {
+  if (!_hasDrawing) return;
 
-    // TODO: Replace delay with real API call
-    // Send to backend:
-    // - whiteboard image (base64)
-    // - question string
-    // - response_time_seconds
-    // - hesitation_count
-    // - retry_attempts
-    // - stroke_count
-    await Future.delayed(const Duration(milliseconds: 1800));
+  setState(() {
+    _submitted = true;
+    _evaluating = true;
+  });
 
-    setState(() {
-      _evaluating = false;
-      _done = true;
-    });
+  // EXPORT WHITEBOARD TO PNG
+  final pngBytes = await _exportWhiteboardToPng();
+
+  print("PNG SIZE: ${pngBytes?.length}");
+
+  // =========================================
+  // FAKE OCR RESULT (for now)
+  // Backend OCR will replace this later
+  // =========================================
+
+  await Future.delayed(const Duration(seconds: 1));
+
+  _recognizedText = "x = 5";
+
+  setState(() {
+    _evaluating = false;
+  });
+
+  // SHOW CONFIRMATION POPUP
+  await _showAnswerConfirmationDialog();
+
+  print("FINAL CONFIRMED ANSWER:");
+  print(_recognizedText);
+
+  // SEND TO BACKEND LATER:
+  // pngBytes
+  // _recognizedText
+
+  await Future.delayed(const Duration(milliseconds: 500));
+
+  setState(() {
+    _done = true;
+  });
+}
+  
+  Future<Uint8List?> _exportWhiteboardToPng() async {
+  try {
+    RenderRepaintBoundary boundary =
+        _whiteboardKey.currentContext!.findRenderObject()
+            as RenderRepaintBoundary;
+
+    ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+
+    ByteData? byteData =
+        await image.toByteData(format: ui.ImageByteFormat.png);
+
+    return byteData!.buffer.asUint8List();
+  } catch (e) {
+    print("ERROR exporting image: $e");
+    return null;
   }
+}
+
+Future<void> _showAnswerConfirmationDialog() async {
+  _answerController.text = _recognizedText;
+
+  await showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) {
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        title: const Text("Confirm Your Answer"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "We extracted this text from your handwriting. "
+              "Please confirm or edit it if needed.",
+            ),
+
+            const SizedBox(height: 16),
+
+            TextField(
+              controller: _answerController,
+              maxLines: 5,
+              decoration: InputDecoration(
+                hintText: "Edit your answer here...",
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: const Text("Edit"),
+          ),
+
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _recognizedText = _answerController.text;
+              });
+
+              Navigator.pop(context);
+            },
+            child: const Text("Confirm"),
+          ),
+        ],
+      );
+    },
+  );
+}
 
   void _next() {
     if (_isLast) {
@@ -454,7 +562,9 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
         const SizedBox(height: 10),
 
         // Canvas
-        Container(
+        RepaintBoundary(
+          key: _whiteboardKey,
+          child: Container(
           height: 260,
           decoration: BoxDecoration(
             color: Colors.white,
@@ -469,7 +579,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             ),
             boxShadow: [
               BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
+                  color: Colors.black,
                   offset: const Offset(0, 3),
                   blurRadius: 10),
             ],
@@ -557,7 +667,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
               ],
             ),
           ),
-        ),
+        )),
         const SizedBox(height: 12),
 
         // Submit button
