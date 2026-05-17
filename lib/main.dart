@@ -9,7 +9,7 @@ import 'screens/signup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'screens/main_page.dart';
 import 'screens/practice_screen.dart';
-
+import 'screens/exam_screen.dart';
 void main() async {
     WidgetsFlutterBinding.ensureInitialized();
     await Supabase.initialize(
@@ -58,7 +58,7 @@ class LearnChinguApp extends StatelessWidget {
         '/signup': (_) => const SignUpScreen(),
         '/home': (_) => const HomeScreen(),
         '/practice': (_) => const PracticeTopicScreen(),
-        // '/exam': (_) => const ExamScreen(),
+        '/exam': (_) => const ExamScreen(),
       },
     );
   }

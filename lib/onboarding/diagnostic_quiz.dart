@@ -9,6 +9,10 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 import '../models/difficulty_level.dart';
 import '/screens/question_service.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -98,6 +102,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   List<DiagnosticQuestion> _questions = [];
   bool _loading = true;
   bool _isErasing = false;
+  String _backendToken = '';
 
   Color _strokeColor = Colors.black87;
 
@@ -110,6 +115,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   bool _submitted = false;
   bool _evaluating = false;
   bool _done = false;
+  bool _isCorrect = false;
+  int _marksAwarded = 0;
+  String _feedback = '';
+  String _encouragement = '';
+  List<String> _stepsCorrect = [];
+  List<String> _errors = [];
 
   // Background tracking
   DateTime? _questionStartTime;
@@ -133,7 +144,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   void initState() {
     super.initState();
     _questionStartTime = DateTime.now();
-    _loadQuestions();
+    _loginToBackend().then((_) => _loadQuestions());
 
     _slideController = AnimationController(
       vsync: this,
@@ -157,6 +168,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   // ── Data loading ──────────────────────────────────────────────────────────
 
+  
+
   Future<void> _loadQuestions() async {
     final service = QuestionService();
     final data = await service.fetchDiagnosticQuestions();
@@ -166,6 +179,19 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
       _questionStartTime = DateTime.now();
     });
   }
+
+  Future<void> _loginToBackend() async {
+  try {
+    final session = Supabase.instance.client.auth.currentSession;
+    if (session == null) return;
+
+    _backendToken = session.accessToken;
+    print('Using Supabase token as backend token: $_backendToken');
+
+  } catch (e) {
+    print('Backend login error: $e');
+  }
+}
 
   // ── Computed ──────────────────────────────────────────────────────────────
 
@@ -219,43 +245,104 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
     final pngBytes = await _exportWhiteboardToPng();
     print("PNG SIZE: ${pngBytes?.length}");
 
-    // Fake OCR — replace with real backend call later
-    await Future.delayed(const Duration(seconds: 1));
-    _recognizedText = "x = 5";
+    if (pngBytes == null) {
+      setState(() => _evaluating = false);
+      return;
+    }
+
+    final token = _backendToken;
+    final base64Image = base64Encode(pngBytes);
+
+    // Step 1: Translate
+    try {
+      print('Calling /api/evaluate/translate...');
+      final translateRes = await http.post(
+        Uri.parse('https://learnchingu.onrender.com/api/evaluate/translate'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'question_id': _current.id,
+          'image_base64': base64Image,
+        }),
+      );
+
+      print('Translate status: ${translateRes.statusCode}');
+      print('Translate body: ${translateRes.body}');
+
+      if (translateRes.statusCode == 200) {
+        final data = jsonDecode(translateRes.body);
+        _recognizedText = data['extracted_text'] ?? '';
+      } else {
+        _recognizedText = '';
+      }
+    } catch (e) {
+      print('Translate error: $e');
+      _recognizedText = '';
+    }
 
     setState(() => _evaluating = false);
 
+    // Step 2: Confirm dialog
     await _showAnswerConfirmationDialog();
-
     print("FINAL CONFIRMED ANSWER: $_recognizedText");
 
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Step 3: Mark
+    setState(() => _evaluating = true);
 
-    // Fake correctness — replace with real evaluation later
-    const bool isCorrect = true;
+    bool isCorrect = false;
+    int marksAwarded = 0;
 
-    if (isCorrect) {
-      switch (_current.level) {
-        case DifficultyLevel.beginner:
-          _score += 1;
-          break;
-        case DifficultyLevel.intermediate:
-          _score += 2;
-          break;
-        case DifficultyLevel.advanced:
-          _score += 3;
-          break;
+    try {
+      print('Calling /api/evaluate/mark...');
+      final markRes = await http.post(
+        Uri.parse('https://learnchingu.onrender.com/api/evaluate/mark'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'question_id': _current.id,
+          'image_base64': base64Image,
+          'extracted_text': _recognizedText,
+        }),
+      );
+
+      print('Mark status: ${markRes.statusCode}');
+      print('Mark body: ${markRes.body}');
+
+      if (markRes.statusCode == 200) {
+        final markData = jsonDecode(markRes.body);
+        isCorrect = markData['is_correct'] ?? false;
+        marksAwarded = markData['marks_awarded'] ?? 0;
+        _feedback = markData['feedback'] ?? '';
+        _encouragement = markData['encouragement'] ?? '';
+        _stepsCorrect = List<String>.from(markData['steps_correct'] ?? []);
+        _errors = List<String>.from(markData['errors'] ?? []);
+
+        if (isCorrect) _score += marksAwarded;
+        print('CORRECT: $isCorrect | MARKS: $marksAwarded | SCORE: $_score');
       }
+    } catch (e) {
+      print('Mark error: $e');
     }
 
-    print("CURRENT SCORE: $_score");
-
-    setState(() => _done = true);
+    setState(() {
+      _isCorrect = isCorrect;
+      _marksAwarded = marksAwarded;
+      _feedback = _feedback;
+      _encouragement = _encouragement;
+      _stepsCorrect = _stepsCorrect;
+      _errors = _errors;
+      _evaluating = false;
+      _done = true;
+    });
   }
 
   DifficultyLevel _calculateLevel() {
-    if (_score <= 2) return DifficultyLevel.beginner;
-    if (_score <= 6) return DifficultyLevel.intermediate;
+    if (_score <= 3) return DifficultyLevel.beginner;
+    if (_score <= 7) return DifficultyLevel.intermediate;
     return DifficultyLevel.advanced;
   }
 
@@ -281,15 +368,14 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
       barrierDismissible: false,
       builder: (context) {
         return AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text("Confirm Your Answer"),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
                 "We extracted this text from your handwriting. "
-                "Please confirm or edit it if needed.",
+                "Edit if needed, then tap Confirm.",
               ),
               const SizedBox(height: 16),
               TextField(
@@ -304,15 +390,18 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Edit"),
-            ),
             ElevatedButton(
               onPressed: () {
                 setState(() => _recognizedText = _answerController.text);
                 Navigator.pop(context);
               },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
               child: const Text("Confirm"),
             ),
           ],
@@ -343,6 +432,12 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
       _hesitationCount = 0;
       _lastStrokeTime = null;
       _questionStartTime = DateTime.now();
+      _isCorrect = false;
+      _marksAwarded = 0;
+      _feedback = '';
+      _encouragement = '';
+      _stepsCorrect = [];
+      _errors = [];
     });
     _slideController.forward();
   }
@@ -397,18 +492,20 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             Expanded(
               child: SlideTransition(
                 position: _slideAnim,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildLevelBadge(),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
                       _buildQuestionCard(),
-                      const SizedBox(height: 28),
-                      _buildWhiteboard(),
+                      const SizedBox(height: 12),
+                      Expanded(child: _buildWhiteboard()),
                       if (_done) ...[
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
+                        _buildFeedbackBanner(),
+                        const SizedBox(height: 12),
                         _buildNextButton(),
                       ],
                     ],
@@ -418,6 +515,169 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFeedbackBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _isCorrect ? const Color(0xFFDFF5E3) : const Color(0xFFFFEBEE),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isCorrect
+              ? const Color(0xFF4CAF50).withOpacity(0.4)
+              : Colors.redAccent.withOpacity(0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                _isCorrect ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                color: _isCorrect ? const Color(0xFF2E7D32) : Colors.redAccent,
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _isCorrect ? 'Correct! 🎉' : 'Incorrect 😔',
+                  style: GoogleFonts.outfit(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: _isCorrect
+                        ? const Color(0xFF2E7D32)
+                        : Colors.redAccent,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _isCorrect
+                      ? const Color(0xFF4CAF50).withOpacity(0.2)
+                      : Colors.redAccent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$_marksAwarded / ${_current.marksAvailable} marks',
+                  style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _isCorrect
+                        ? const Color(0xFF2E7D32)
+                        : Colors.redAccent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (_feedback.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              _feedback,
+              style: GoogleFonts.nunito(
+                fontSize: 13,
+                color: _isCorrect
+                    ? const Color(0xFF2E7D32)
+                    : Colors.redAccent.shade700,
+                height: 1.5,
+              ),
+            ),
+          ],
+
+          if (_stepsCorrect.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('What you got right:',
+                style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF2E7D32))),
+            const SizedBox(height: 4),
+            ..._stepsCorrect.map((step) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('✓ ',
+                          style: TextStyle(
+                              color: Color(0xFF4CAF50),
+                              fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(step,
+                            style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: const Color(0xFF2E7D32),
+                                height: 1.4)),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+
+          if (_errors.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('What needs work:',
+                style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.redAccent)),
+            const SizedBox(height: 4),
+            ..._errors.map((error) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('✗ ',
+                          style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(error,
+                            style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: Colors.redAccent,
+                                height: 1.4)),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+
+          if (_encouragement.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Text('💬 ', style: TextStyle(fontSize: 14)),
+                  Expanded(
+                    child: Text(
+                      _encouragement,
+                      style: GoogleFonts.nunito(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: _isCorrect
+                            ? const Color(0xFF2E7D32)
+                            : Colors.redAccent.shade700,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

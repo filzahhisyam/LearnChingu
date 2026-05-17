@@ -296,6 +296,12 @@ class _PracticeScreenState extends State<PracticeScreen>
   bool _evaluating = false;
   bool _done = false;
   bool _isCorrect = false;
+  String _backendToken = '';
+  int _marksAwarded = 0;
+  String _feedback = '';
+  String _encouragement = '';
+  List<String> _stepsCorrect = [];
+  List<String> _errors = [];
 
   // Score tracking
   int _totalAnswered = 0;
@@ -320,7 +326,7 @@ class _PracticeScreenState extends State<PracticeScreen>
   @override
   void initState() {
     super.initState();
-    _fetchQuestions();
+    _loginToBackend().then((_) => _fetchQuestions());
 
     _slideController = AnimationController(
       vsync: this,
@@ -364,6 +370,17 @@ class _PracticeScreenState extends State<PracticeScreen>
     }
   }
 
+  Future<void> _loginToBackend() async {
+    try {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session == null) return;
+      _backendToken = session.accessToken;
+      print('Backend token set');
+    } catch (e) {
+      print('Backend login error: $e');
+    }
+  }
+
   // ── Computed ──────────────────────────────────────────────────────────────
 
   PracticeQuestion get _current => _questions[_currentIndex];
@@ -400,64 +417,107 @@ class _PracticeScreenState extends State<PracticeScreen>
   // ── Submit ────────────────────────────────────────────────────────────────
 
   Future<void> _submit() async {
-  if (!_hasDrawing) return;
+    if (!_hasDrawing) return;
 
-  setState(() {
-    _submitted = true;
-    _evaluating = true;
-  });
+    setState(() {
+      _submitted = true;
+      _evaluating = true;
+    });
 
+    final pngBytes = await _exportWhiteboardToPng();
+    print("PNG SIZE: ${pngBytes?.length}");
 
+    if (pngBytes == null) {
+      setState(() => _evaluating = false);
+      return;
+    }
 
-  final pngBytes = await _exportWhiteboardToPng();
-  print("PNG SIZE: ${pngBytes?.length}");
+    final token = _backendToken;
+    final base64Image = base64Encode(pngBytes);
 
-  // ── TEMPORARY: simulate backend response ──
-  // Replace with real API call when backend is ready
-  await Future.delayed(const Duration(seconds: 2));
+    // Step 1: Translate
+    try {
+      print('Calling /api/evaluate/translate...');
+      final translateRes = await http.post(
+        Uri.parse('https://learnchingu.onrender.com/api/evaluate/translate'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'question_id': _current.id,
+          'image_base64': base64Image,
+        }),
+      );
 
-  setState(() => _evaluating = false);
+      print('Translate status: ${translateRes.statusCode}');
+      print('Translate body: ${translateRes.body}');
 
-  // Show dialog so student can confirm/correct OCR text
-  await _showAnswerConfirmationDialog();
+      if (translateRes.statusCode == 200) {
+        final data = jsonDecode(translateRes.body);
+        _recognizedText = data['extracted_text'] ?? '';
+      } else {
+        _recognizedText = '';
+      }
+    } catch (e) {
+      print('Translate error: $e');
+      _recognizedText = '';
+    }
 
-  setState(() => _evaluating = true);
+    setState(() => _evaluating = false);
 
-  setState(() {
-    _isCorrect = true;           // placeholder
-    _totalAnswered++;
-    if (_isCorrect) _totalCorrect++;
-    _evaluating = false;
-    _done = true;
-  });
+    // Step 2: Confirm dialog
+    await _showAnswerConfirmationDialog();
+    print("FINAL CONFIRMED ANSWER: $_recognizedText");
 
-  // ── REAL backend call (uncomment when backend gives you the URL) ──
-  // try {
-  //   final base64Image = base64Encode(pngBytes!);
-  //   final response = await http.post(
-  //     Uri.parse('https://YOUR_BACKEND_URL/api/evaluate/mark'),
-  //     headers: {
-  //       'Content-Type': 'application/json',
-  //       'Authorization': 'Bearer ${Supabase.instance.client.auth.currentSession?.accessToken}',
-  //     },
-  //     body: jsonEncode({
-  //       'question_id': _current.id,
-  //       'image': base64Image,
-  //     }),
-  //   );
-  //   final result = jsonDecode(response.body);
-  //   setState(() {
-  //     _isCorrect = result['is_correct'];
-  //     _totalAnswered++;
-  //     if (_isCorrect) _totalCorrect++;
-  //     _evaluating = false;
-  //     _done = true;
-  //   });
-  // } catch (e) {
-  //   print('Backend error: $e');
-  //   setState(() => _evaluating = false);
-  // }
-}
+    // Step 3: Mark
+    setState(() => _evaluating = true);
+
+    bool isCorrect = false;
+    int marksAwarded = 0;
+
+    try {
+      print('Calling /api/evaluate/mark...');
+      final markRes = await http.post(
+        Uri.parse('https://learnchingu.onrender.com/api/evaluate/mark'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'question_id': _current.id,
+          'image_base64': base64Image,
+          'extracted_text': _recognizedText,
+        }),
+      );
+
+      print('Mark status: ${markRes.statusCode}');
+      print('Mark body: ${markRes.body}');
+
+      if (markRes.statusCode == 200) {
+        final markData = jsonDecode(markRes.body);
+        isCorrect = markData['is_correct'] ?? false;
+        marksAwarded = markData['marks_awarded'] ?? 0;
+        _feedback = markData['feedback'] ?? '';
+        _encouragement = markData['encouragement'] ?? '';
+        _stepsCorrect = List<String>.from(markData['steps_correct'] ?? []);
+        _errors = List<String>.from(markData['errors'] ?? []);
+
+        if (isCorrect) _totalCorrect++;
+        _totalAnswered++;
+        print('CORRECT: $isCorrect | MARKS: $marksAwarded');
+      }
+    } catch (e) {
+      print('Mark error: $e');
+    }
+
+    setState(() {
+      _isCorrect = isCorrect;
+      _marksAwarded = marksAwarded;
+      _evaluating = false;
+      _done = true;
+    });
+  }
 
   Future<Uint8List?> _exportWhiteboardToPng() async {
     try {
@@ -472,48 +532,53 @@ class _PracticeScreenState extends State<PracticeScreen>
     }
   }
 
-  // Identical to diagnostic
   Future<void> _showAnswerConfirmationDialog() async {
     _answerController.text = _recognizedText;
+
     await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Confirm Your Answer"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "We extracted this text from your handwriting. "
-              "Please confirm or edit it if needed.",
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _answerController,
-              maxLines: 5,
-              decoration: InputDecoration(
-                hintText: "Edit your answer here...",
-                border: OutlineInputBorder(
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("Confirm Your Answer"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "We extracted this text from your handwriting. "
+                "Edit if needed, then tap Confirm.",
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _answerController,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  hintText: "Edit your answer here...",
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () {
+                setState(() => _recognizedText = _answerController.text);
+                Navigator.pop(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12)),
               ),
+              child: const Text("Confirm"),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Edit"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              setState(() => _recognizedText = _answerController.text);
-              Navigator.pop(context);
-            },
-            child: const Text("Confirm"),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -529,6 +594,11 @@ class _PracticeScreenState extends State<PracticeScreen>
       _evaluating = false;
       _done = false;
       _isCorrect = false;
+      _marksAwarded = 0;
+      _feedback = '';
+      _encouragement = '';
+      _stepsCorrect = [];
+      _errors = [];
       _strokes.clear();
       _currentStroke = null;
       _retryAttempts = 0;
@@ -974,45 +1044,145 @@ class _PracticeScreenState extends State<PracticeScreen>
               : Colors.redAccent.withOpacity(0.4),
         ),
       ),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            _isCorrect ? Icons.celebration_rounded : Icons.lightbulb_rounded,
-            color: _isCorrect ? const Color(0xFF2E7D32) : Colors.redAccent,
-            size: 24,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _isCorrect ? 'Great job! 🎉' : 'Keep going! 💪',
+          Row(
+            children: [
+              Icon(
+                _isCorrect ? Icons.check_circle_rounded : Icons.cancel_rounded,
+                color: _isCorrect ? const Color(0xFF2E7D32) : Colors.redAccent,
+                size: 24,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  _isCorrect ? 'Correct! 🎉' : 'Incorrect 😔',
                   style: GoogleFonts.outfit(
-                    fontSize: 14,
+                    fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color: _isCorrect
-                        ? const Color(0xFF2E7D32)
-                        : Colors.redAccent,
+                    color: _isCorrect ? const Color(0xFF2E7D32) : Colors.redAccent,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _isCorrect
-                      ? 'You got this one right. Review the marking scheme above to reinforce your understanding.'
-                      : 'Study the marking scheme carefully and try the next one. You\'ve got this!',
-                  style: GoogleFonts.nunito(
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _isCorrect
+                      ? const Color(0xFF4CAF50).withOpacity(0.2)
+                      : Colors.redAccent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '$_marksAwarded / ${_current.marksAvailable} marks',
+                  style: GoogleFonts.outfit(
                     fontSize: 12,
-                    color: _isCorrect
-                        ? const Color(0xFF2E7D32)
-                        : Colors.redAccent.shade700,
-                    height: 1.5,
+                    fontWeight: FontWeight.w700,
+                    color: _isCorrect ? const Color(0xFF2E7D32) : Colors.redAccent,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+
+          if (_feedback.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              _feedback,
+              style: GoogleFonts.nunito(
+                fontSize: 13,
+                color: _isCorrect ? const Color(0xFF2E7D32) : Colors.redAccent.shade700,
+                height: 1.5,
+              ),
+            ),
+          ],
+
+          if (_stepsCorrect.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('What you got right:',
+                style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF2E7D32))),
+            const SizedBox(height: 4),
+            ..._stepsCorrect.map((step) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('✓ ',
+                          style: TextStyle(
+                              color: Color(0xFF4CAF50),
+                              fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(step,
+                            style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: const Color(0xFF2E7D32),
+                                height: 1.4)),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+
+          if (_errors.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('What needs work:',
+                style: GoogleFonts.outfit(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.redAccent)),
+            const SizedBox(height: 4),
+            ..._errors.map((error) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('✗ ',
+                          style: TextStyle(
+                              color: Colors.redAccent,
+                              fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(error,
+                            style: GoogleFonts.nunito(
+                                fontSize: 12,
+                                color: Colors.redAccent,
+                                height: 1.4)),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+
+          if (_encouragement.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const Text('💬 ', style: TextStyle(fontSize: 14)),
+                  Expanded(
+                    child: Text(
+                      _encouragement,
+                      style: GoogleFonts.nunito(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: _isCorrect
+                            ? const Color(0xFF2E7D32)
+                            : Colors.redAccent.shade700,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
