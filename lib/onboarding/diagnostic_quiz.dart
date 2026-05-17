@@ -4,46 +4,46 @@ import 'dart:typed_data';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'diagnostic_results.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
+import '../models/difficulty_level.dart';
+import '/screens/question_service.dart';
 
-// ── Data ─────────────────────────────────────────────────────────────────────
-
-enum DifficultyLevel { beginner, intermediate, advanced }
-
+// ── Data ──────────────────────────────────────────────────────────────────────
 
 class DiagnosticQuestion {
-  final String question;
+  final String id;
+  final String questionText;
+  final String imageUrl;
+  final String topic;
+  final int difficulty;
+  final int marksAvailable;
   final DifficultyLevel level;
 
-  const DiagnosticQuestion({
-    required this.question,
+  DiagnosticQuestion({
+    required this.id,
+    required this.questionText,
+    required this.imageUrl,
+    required this.topic,
+    required this.difficulty,
+    required this.marksAvailable,
     required this.level,
   });
-}
 
-const List<DiagnosticQuestion> _questions = [
-  DiagnosticQuestion(
-    question: 'What is 12 × 8?',
-    level: DifficultyLevel.beginner,
-  ),
-  DiagnosticQuestion(
-    question: 'Solve for x: 3x + 7 = 22',
-    level: DifficultyLevel.intermediate,
-  ),
-  DiagnosticQuestion(
-    question: 'What is the area of a circle with radius 5? (Use π ≈ 3.14)',
-    level: DifficultyLevel.intermediate,
-  ),
-  DiagnosticQuestion(
-    question: 'What is the slope of the line passing through (2, 3) and (4, 7)?',
-    level: DifficultyLevel.intermediate,
-  ),
-  DiagnosticQuestion(
-    question: 'What is the derivative of f(x) = 3x² + 5x − 2?',
-    level: DifficultyLevel.advanced,
-  ),
-];
+  factory DiagnosticQuestion.fromJson(Map<String, dynamic> json) {
+    final int diff = (json['difficulty'] as int).clamp(0, 2);
+    return DiagnosticQuestion(
+      id: json['id'],
+      questionText: json['question_text'] ??'',
+      imageUrl: json['question_image_url']??'',
+      topic: json['topic'],
+      difficulty: json['difficulty'],
+      marksAvailable: json['marks_available'],
+      level: DifficultyLevel.values[diff],
+    );
+  }
+}
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
 
@@ -77,8 +77,6 @@ class _WhiteboardPainter extends CustomPainter {
     }
   }
 
-  
-
   @override
   bool shouldRepaint(_WhiteboardPainter old) => true;
 }
@@ -94,19 +92,25 @@ class DiagnosticScreen extends StatefulWidget {
 
 class _DiagnosticScreenState extends State<DiagnosticScreen>
     with TickerProviderStateMixin {
-  
+
+  // ── State ─────────────────────────────────────────────────────────────────
+
+  List<DiagnosticQuestion> _questions = [];
+  bool _loading = true;
+
   Color _strokeColor = Colors.black87;
 
   final GlobalKey _whiteboardKey = GlobalKey();
   String _recognizedText = '';
-  final TextEditingController _answerController =
-    TextEditingController();
+  final TextEditingController _answerController = TextEditingController();
+
   int _currentIndex = 0;
+  int _score = 0;
   bool _submitted = false;
   bool _evaluating = false;
   bool _done = false;
 
-  // Background tracking (sent to backend, not shown to user)
+  // Background tracking
   DateTime? _questionStartTime;
   int _retryAttempts = 0;
   int _hesitationCount = 0;
@@ -121,10 +125,13 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   late AnimationController _slideController;
   late Animation<Offset> _slideAnim;
 
+  // ── Lifecycle ─────────────────────────────────────────────────────────────
+
   @override
   void initState() {
     super.initState();
     _questionStartTime = DateTime.now();
+    _loadQuestions();
 
     _slideController = AnimationController(
       vsync: this,
@@ -133,7 +140,8 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
     _slideAnim = Tween<Offset>(
       begin: const Offset(1, 0),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
+    ).animate(
+        CurvedAnimation(parent: _slideController, curve: Curves.easeOut));
 
     _slideController.forward();
   }
@@ -141,8 +149,23 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   @override
   void dispose() {
     _slideController.dispose();
+    _answerController.dispose();
     super.dispose();
   }
+
+  // ── Data loading ──────────────────────────────────────────────────────────
+
+  Future<void> _loadQuestions() async {
+    final service = QuestionService();
+    final data = await service.fetchDiagnosticQuestions();
+    setState(() {
+      _questions = data.map((q) => DiagnosticQuestion.fromJson(q)).toList();;
+      _loading = false;
+      _questionStartTime = DateTime.now();
+    });
+  }
+
+  // ── Computed ──────────────────────────────────────────────────────────────
 
   DiagnosticQuestion get _current => _questions[_currentIndex];
   bool get _isLast => _currentIndex == _questions.length - 1;
@@ -183,128 +206,127 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   // ── Submit ────────────────────────────────────────────────────────────────
 
-Future<void> _submit() async {
-  if (!_hasDrawing) return;
+  Future<void> _submit() async {
+    if (!_hasDrawing) return;
 
-  setState(() {
-    _submitted = true;
-    _evaluating = true;
-  });
+    setState(() {
+      _submitted = true;
+      _evaluating = true;
+    });
 
-  // EXPORT WHITEBOARD TO PNG
-  final pngBytes = await _exportWhiteboardToPng();
+    final pngBytes = await _exportWhiteboardToPng();
+    print("PNG SIZE: ${pngBytes?.length}");
 
-  print("PNG SIZE: ${pngBytes?.length}");
+    // Fake OCR — replace with real backend call later
+    await Future.delayed(const Duration(seconds: 1));
+    _recognizedText = "x = 5";
 
-  // =========================================
-  // FAKE OCR RESULT (for now)
-  // Backend OCR will replace this later
-  // =========================================
+    setState(() => _evaluating = false);
 
-  await Future.delayed(const Duration(seconds: 1));
+    await _showAnswerConfirmationDialog();
 
-  _recognizedText = "x = 5";
+    print("FINAL CONFIRMED ANSWER: $_recognizedText");
 
-  setState(() {
-    _evaluating = false;
-  });
+    await Future.delayed(const Duration(milliseconds: 500));
 
-  // SHOW CONFIRMATION POPUP
-  await _showAnswerConfirmationDialog();
+    // Fake correctness — replace with real evaluation later
+    const bool isCorrect = true;
 
-  print("FINAL CONFIRMED ANSWER:");
-  print(_recognizedText);
+    if (isCorrect) {
+      switch (_current.level) {
+        case DifficultyLevel.beginner:
+          _score += 1;
+          break;
+        case DifficultyLevel.intermediate:
+          _score += 2;
+          break;
+        case DifficultyLevel.advanced:
+          _score += 3;
+          break;
+      }
+    }
 
-  // SEND TO BACKEND LATER:
-  // pngBytes
-  // _recognizedText
+    print("CURRENT SCORE: $_score");
 
-  await Future.delayed(const Duration(milliseconds: 500));
-
-  setState(() {
-    _done = true;
-  });
-}
-  
-  Future<Uint8List?> _exportWhiteboardToPng() async {
-  try {
-    RenderRepaintBoundary boundary =
-        _whiteboardKey.currentContext!.findRenderObject()
-            as RenderRepaintBoundary;
-
-    ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-
-    ByteData? byteData =
-        await image.toByteData(format: ui.ImageByteFormat.png);
-
-    return byteData!.buffer.asUint8List();
-  } catch (e) {
-    print("ERROR exporting image: $e");
-    return null;
+    setState(() => _done = true);
   }
-}
 
-Future<void> _showAnswerConfirmationDialog() async {
-  _answerController.text = _recognizedText;
+  DifficultyLevel _calculateLevel() {
+    if (_score <= 2) return DifficultyLevel.beginner;
+    if (_score <= 6) return DifficultyLevel.intermediate;
+    return DifficultyLevel.advanced;
+  }
 
-  await showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        title: const Text("Confirm Your Answer"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "We extracted this text from your handwriting. "
-              "Please confirm or edit it if needed.",
-            ),
+  Future<Uint8List?> _exportWhiteboardToPng() async {
+    try {
+      final boundary = _whiteboardKey.currentContext!.findRenderObject()
+          as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData =
+          await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData!.buffer.asUint8List();
+    } catch (e) {
+      print("ERROR exporting image: $e");
+      return null;
+    }
+  }
 
-            const SizedBox(height: 16),
+  Future<void> _showAnswerConfirmationDialog() async {
+    _answerController.text = _recognizedText;
 
-            TextField(
-              controller: _answerController,
-              maxLines: 5,
-              decoration: InputDecoration(
-                hintText: "Edit your answer here...",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text("Confirm Your Answer"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "We extracted this text from your handwriting. "
+                "Please confirm or edit it if needed.",
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _answerController,
+                maxLines: 5,
+                decoration: InputDecoration(
+                  hintText: "Edit your answer here...",
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Edit"),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() => _recognizedText = _answerController.text);
+                Navigator.pop(context);
+              },
+              child: const Text("Confirm"),
             ),
           ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text("Edit"),
-          ),
-
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _recognizedText = _answerController.text;
-              });
-
-              Navigator.pop(context);
-            },
-            child: const Text("Confirm"),
-          ),
-        ],
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
   void _next() {
     if (_isLast) {
-      Navigator.pushReplacementNamed(context, '/dashboard');
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => DiagnosticResults(level: _calculateLevel()),
+        ),
+      );
       return;
     }
     _slideController.reset();
@@ -327,17 +349,23 @@ Future<void> _showAnswerConfirmationDialog() async {
 
   Color _levelColor(DifficultyLevel l) {
     switch (l) {
-      case DifficultyLevel.beginner: return const Color(0xFF4CAF50);
-      case DifficultyLevel.intermediate: return const Color(0xFFFFA726);
-      case DifficultyLevel.advanced: return const Color(0xFFEF5350);
+      case DifficultyLevel.beginner:
+        return const Color(0xFF4CAF50);
+      case DifficultyLevel.intermediate:
+        return const Color(0xFFFFA726);
+      case DifficultyLevel.advanced:
+        return const Color(0xFFEF5350);
     }
   }
 
   String _levelLabel(DifficultyLevel l) {
     switch (l) {
-      case DifficultyLevel.beginner: return 'Beginner';
-      case DifficultyLevel.intermediate: return 'Intermediate';
-      case DifficultyLevel.advanced: return 'Advanced';
+      case DifficultyLevel.beginner:
+        return 'Beginner';
+      case DifficultyLevel.intermediate:
+        return 'Intermediate';
+      case DifficultyLevel.advanced:
+        return 'Advanced';
     }
   }
 
@@ -345,6 +373,18 @@ Future<void> _showAnswerConfirmationDialog() async {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_questions.isEmpty) {
+      return const Scaffold(
+        body: Center(child: Text('No questions found.')),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF9F9F9),
       body: SafeArea(
@@ -388,7 +428,8 @@ Future<void> _showAnswerConfirmationDialog() async {
           GestureDetector(
             onTap: () => Navigator.pop(context),
             child: Container(
-              width: 40, height: 40,
+              width: 40,
+              height: 40,
               decoration: BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
@@ -407,7 +448,8 @@ Future<void> _showAnswerConfirmationDialog() async {
                     color: AppColors.textPrimary)),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: AppColors.primary.withOpacity(0.12),
               borderRadius: BorderRadius.circular(20),
@@ -432,7 +474,8 @@ Future<void> _showAnswerConfirmationDialog() async {
           value: _progress,
           minHeight: 6,
           backgroundColor: AppColors.border,
-          valueColor: AlwaysStoppedAnimation<Color>(AppColors.primaryLight),
+          valueColor:
+              AlwaysStoppedAnimation<Color>(AppColors.primaryLight),
         ),
       ),
     );
@@ -455,7 +498,9 @@ Future<void> _showAnswerConfirmationDialog() async {
           const SizedBox(width: 4),
           Text(label,
               style: GoogleFonts.outfit(
-                  fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: color)),
         ],
       ),
     );
@@ -484,17 +529,62 @@ Future<void> _showAnswerConfirmationDialog() async {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSecondary)),
-          const SizedBox(height: 8),
-          Text(_current.question,
-              style: GoogleFonts.outfit(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
-                  height: 1.4)),
-        ],
-      ),
-    );
-  }
+          ClipRRect(
+          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+          child: Image.network(
+            _current.imageUrl,
+            width: double.infinity,
+            fit: BoxFit.contain,
+            headers: const {
+              'Cache-Control': 'no-cache',
+            },
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                height: 200,
+                color: Colors.grey.shade50,
+                child: Center(
+                  child: CircularProgressIndicator(
+                    value: loadingProgress.expectedTotalBytes != null
+                        ? loadingProgress.cumulativeBytesLoaded /
+                            loadingProgress.expectedTotalBytes!
+                        : null,
+                    color: AppColors.primary,
+                    strokeWidth: 2,
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              print('Image error: $error'); // helps debug
+              return Container(
+                height: 200,
+                color: Colors.grey.shade100,
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image_rounded,
+                          color: Colors.grey.shade400, size: 36),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Could not load image',
+                        style: GoogleFonts.outfit(
+                          fontSize: 12,
+                          color: Colors.grey.shade400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildWhiteboard() {
     return Column(
@@ -512,7 +602,8 @@ Future<void> _showAnswerConfirmationDialog() async {
           ],
         ),
         const SizedBox(height: 4),
-        Text('Show your full working in the whiteboard below to be evaluated',
+        Text(
+            'Show your full working in the whiteboard below to be evaluated',
             style: GoogleFonts.outfit(
                 fontSize: 12, color: AppColors.textSecondary)),
         const SizedBox(height: 12),
@@ -553,7 +644,8 @@ Future<void> _showAnswerConfirmationDialog() async {
                     const SizedBox(width: 4),
                     Text('Clear',
                         style: GoogleFonts.outfit(
-                            fontSize: 12, color: AppColors.textSecondary)),
+                            fontSize: 12,
+                            color: AppColors.textSecondary)),
                   ]),
                 ),
               ),
@@ -565,109 +657,114 @@ Future<void> _showAnswerConfirmationDialog() async {
         RepaintBoundary(
           key: _whiteboardKey,
           child: Container(
-          height: 260,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: _done
-                  ? const Color(0xFF4CAF50)
-                  : _submitted
-                      ? AppColors.border
-                      : AppColors.primaryDark,
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black,
-                  offset: const Offset(0, 3),
-                  blurRadius: 10),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Stack(
-              children: [
-                Listener(
-                  onPointerDown: _onPointerDown,
-                  onPointerMove: _onPointerMove,
-                  onPointerUp: _onPointerUp,
-                  child: CustomPaint(
-                    painter: _WhiteboardPainter(
-                        strokes: _strokes, current: _currentStroke),
-                    child: _strokes.isEmpty && _currentStroke == null
-                        ? Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.draw_rounded,
-                                    color: Colors.grey.shade300, size: 36),
-                                const SizedBox(height: 8),
-                                Text('Write or draw your working here...',
-                                    style: GoogleFonts.outfit(
-                                        fontSize: 13,
-                                        color: Colors.grey.shade400)),
-                              ],
-                            ),
-                          )
-                        : const SizedBox.expand(),
-                  ),
-                ),
-                // Evaluating overlay
-                if (_evaluating)
-                  Container(
-                    color: Colors.white.withOpacity(0.85),
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 32, height: 32,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 3, color: AppColors.primary),
-                          ),
-                          const SizedBox(height: 12),
-                          Text('Analysing...',
-                              style: GoogleFonts.outfit(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary)),
-                        ],
-                      ),
-                    ),
-                  ),
-                // Done overlay
-                if (_done)
-                  Positioned(
-                    top: 10, right: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDFF5E3),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: const Color(0xFF4CAF50).withOpacity(0.4)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.check_circle_rounded,
-                              size: 14, color: Color(0xFF2E7D32)),
-                          const SizedBox(width: 4),
-                          Text('Submitted',
-                              style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF2E7D32))),
-                        ],
-                      ),
-                    ),
-                  ),
+            height: 260,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _done
+                    ? const Color(0xFF4CAF50)
+                    : _submitted
+                        ? AppColors.border
+                        : AppColors.primaryDark,
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    offset: const Offset(0, 3),
+                    blurRadius: 10),
               ],
             ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                children: [
+                  Listener(
+                    onPointerDown: _onPointerDown,
+                    onPointerMove: _onPointerMove,
+                    onPointerUp: _onPointerUp,
+                    child: CustomPaint(
+                      painter: _WhiteboardPainter(
+                          strokes: _strokes, current: _currentStroke),
+                      child: _strokes.isEmpty && _currentStroke == null
+                          ? Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.draw_rounded,
+                                      color: Colors.grey.shade300,
+                                      size: 36),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                      'Write or draw your working here...',
+                                      style: GoogleFonts.outfit(
+                                          fontSize: 13,
+                                          color: Colors.grey.shade400)),
+                                ],
+                              ),
+                            )
+                          : const SizedBox.expand(),
+                    ),
+                  ),
+                  if (_evaluating)
+                    Container(
+                      color: Colors.white.withOpacity(0.85),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 32,
+                              height: 32,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  color: AppColors.primary),
+                            ),
+                            const SizedBox(height: 12),
+                            Text('Analysing...',
+                                style: GoogleFonts.outfit(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (_done)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDFF5E3),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: const Color(0xFF4CAF50)
+                                  .withOpacity(0.4)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.check_circle_rounded,
+                                size: 14, color: Color(0xFF2E7D32)),
+                            const SizedBox(width: 4),
+                            Text('Submitted',
+                                style: GoogleFonts.outfit(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF2E7D32))),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
-        )),
+        ),
         const SizedBox(height: 12),
 
         // Submit button
@@ -701,16 +798,7 @@ Future<void> _showAnswerConfirmationDialog() async {
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
-        onPressed: () {
-          if (_isLast) {
-        Navigator.pushNamed(
-          context,
-          '/onboarding/diagnostic_results',
-        );
-      } else {
-        _next(); // go to next question
-      }
-    },
+        onPressed: _next,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
@@ -720,14 +808,15 @@ Future<void> _showAnswerConfirmationDialog() async {
         ),
         child: Text(
           _isLast ? 'Finish Quiz 🎉' : 'Next Question →',
-          style: GoogleFonts.outfit(
-              fontSize: 16, fontWeight: FontWeight.w800),
+          style:
+              GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.w800),
         ),
       ),
     );
   }
 
-  Widget _toolBtn(IconData icon, String tooltip, VoidCallback onTap) {
+  Widget _toolBtn(
+      IconData icon, String tooltip, VoidCallback onTap) {
     return Tooltip(
       message: tooltip,
       child: GestureDetector(
@@ -751,7 +840,8 @@ Future<void> _showAnswerConfirmationDialog() async {
       onTap: () => setState(() => _strokeColor = color),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
-        width: 24, height: 24,
+        width: 24,
+        height: 24,
         decoration: BoxDecoration(
           color: color,
           shape: BoxShape.circle,

@@ -97,61 +97,28 @@ class LoginScreen extends StatelessWidget {
                 ],
               ),
 
-              const SizedBox(height: 20),
+            const SizedBox(height: 20), // Cleaned up the double spacing
 
-              OutlinedButton.icon(
-                onPressed: () {},
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  side: const BorderSide(color: AppColors.border, width: 1.5),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                ),
-                icon: Image.network(
-                  'https://www.google.com/favicon.ico',
-                  width: 18,
-                  errorBuilder: (_, __, ___) =>
-                      const Icon(Icons.g_mobiledata),
-                ),
-                label: Text(
-                  'Continue with Google',
-                  style: GoogleFonts.nunito(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pushNamed(
+                context,
+                '/signup', // Keeping your target route
+              ),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                side: const BorderSide(color: AppColors.border, width: 1.5),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
                 ),
               ),
-
-              const SizedBox(height: 28),
-
-              Center(
-                child: GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/signup'),
-                  child: RichText(
-                    text: TextSpan(
-                      style: GoogleFonts.nunito(
-                        fontSize: 14,
-                        color: AppColors.textSecondary,
-                      ),
-                      children: const [
-                        TextSpan(text: "New here? "),
-                        TextSpan(
-                          text: 'Create an account',
-                          style: TextStyle(
-                            color: AppColors.purple,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              icon: const Icon(Icons.arrow_forward), // 👈 Added required icon
+              label: const Text('Sign Up'),          // 👈 Brought back your Sign Up label
+            ), // 👈 Fixed the missing closing parenthesis
+                
+          ],
           ),
-        ),
+        ),     
       ),
     );
-  }
+  } 
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../models/difficulty_level.dart';
 
-enum DifficultyLevel { beginner, intermediate, advanced }
 
 class DiagnosticResults extends StatefulWidget {
   final DifficultyLevel level;
@@ -27,6 +27,10 @@ class _DiagnosticResultsState extends State<DiagnosticResults>
 
     _contentController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 900));
+
+    Future.delayed(const Duration(milliseconds: 150), () {
+    _contentController.forward();
+  });
         
     _pulseController = AnimationController(
         vsync: this, duration: const Duration(milliseconds: 1400))
@@ -41,13 +45,22 @@ class _DiagnosticResultsState extends State<DiagnosticResults>
             parent: _contentController, 
             curve: const Interval(0.1, 0.7, curve: Curves.easeOutBack)));
             
-    _scaleAnim = Tween<double>(begin: 0.9, end: 1.0).animate(
-        CurvedAnimation(
-            parent: _contentController, 
-            curve: const Interval(0.1, 0.7, curve: Curves.elasticOut)));
+    _scaleAnim = Tween<double>(
+        begin: 0.92,
+        end: 1.0,
+      ).animate(
+        CurvedAnimation(parent: _contentController, curve: Curves.easeOutBack),
+      );
 
-    _pulseAnim = Tween<double>(begin: 1.0, end: 1.04).animate(
-        CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut));
+       _pulseAnim = Tween<double>(
+        begin: 1.0,
+        end: 1.04,
+      ).animate(
+        CurvedAnimation(
+          parent: _pulseController,
+          curve: Curves.easeInOut,
+        ),
+      );
 
     _contentController.forward();
   }
@@ -76,9 +89,9 @@ class _DiagnosticResultsState extends State<DiagnosticResults>
         };
       case DifficultyLevel.advanced:
         return {
-          'bg': AppColors.primary,
+          'bg': AppColors.primaryLight,
           'text': AppColors.primaryDark,
-          'border': AppColors.primaryLight.withOpacity(0.4),
+          'border': AppColors.primarySurface.withOpacity(0.4),
         };
     }
   }
@@ -99,106 +112,108 @@ class _DiagnosticResultsState extends State<DiagnosticResults>
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final colors = _levelColors;
-    final textTheme = Theme.of(context).textTheme;
+ @override
+Widget build(BuildContext context) {
+  final colors = _levelColors;
+  final textTheme = Theme.of(context).textTheme;
 
-    return Scaffold(
+  return FadeTransition(
+    opacity: _fadeAnim,
+    child: Scaffold(
       body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnim,
-          child: SlideTransition(
-            position: _slideAnim,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(),
+        child: SlideTransition(
+          position: _slideAnim,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
 
-                  // Profile/Avatar Circle
-                  ScaleTransition(
-                    scale: _scaleAnim,
-                    child: Center(
-                      child: Image.asset(
+                const Spacer(),
+
+                ScaleTransition(
+                  scale: _scaleAnim,
+                  child: Center(
+                    child: Image.asset(
                       AppAssets.chinguIcon,
                       width: 160,
                       height: 160,
                       fit: BoxFit.contain,
-),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                ),
 
-                  Text(
-                    'Your Learning Level',
-                    style: textTheme.displayMedium,
-                  ),
+                const SizedBox(height: 24),
 
-                  const SizedBox(height: 28),
+                Text(
+                  'Your Learning Level',
+                  style: textTheme.displayMedium,
+                ),
 
-                  // Modern Pill Badge Component
-                  ScaleTransition(
-                    scale: _scaleAnim,
-                    child: AnimatedBuilder(
-                      animation: _pulseAnim,
-                      builder: (context, child) => Transform.scale(
-                        scale: _pulseAnim.value,
-                        child: child,
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 20),
-                        decoration: BoxDecoration(
-                          color: colors['bg'],
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: colors['border']!, width: 2),
+                const SizedBox(height: 28),
+
+                ScaleTransition(
+                  scale: _scaleAnim,
+                  child: AnimatedBuilder(
+                    animation: _pulseAnim,
+                    builder: (context, child) =>
+                        Transform.scale(scale: _pulseAnim.value, child: child),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 44, vertical: 20),
+                      decoration: BoxDecoration(
+                        color: colors['bg'],
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: colors['border']!,
+                          width: 2,
                         ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_levelEmoji, style: const TextStyle(fontSize: 32)),
-                            const SizedBox(width: 12),
-                            Text(
-                              _levelLabel,
-                              style: textTheme.displaySmall?.copyWith(
-                                color: colors['text'],
-                              ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _levelEmoji,
+                            style: const TextStyle(fontSize: 32),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            _levelLabel,
+                            style: textTheme.displaySmall?.copyWith(
+                              color: colors['text'],
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
+                ),
 
-                  const Spacer(),
+                const Spacer(),
 
-                  // Bottom Action Button using custom theme specifications
-                  ElevatedButton(
-                    onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
-                    style: ElevatedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 54),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Start Learning',
-                          style: Theme.of(context).elevatedButtonTheme.style?.textStyle?.resolve({}),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.arrow_forward_rounded, size: 18),
-                      ],
-                    ),
+                ElevatedButton(
+                  onPressed: () =>
+                      Navigator.pushReplacementNamed(context, '/home'),
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 54),
                   ),
-                  
-                  const SizedBox(height: 24),
-                ],
-              ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Text('Start Learning'),
+                      SizedBox(width: 8),
+                      Icon(Icons.arrow_forward_rounded, size: 18),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+              ],
             ),
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
+    }

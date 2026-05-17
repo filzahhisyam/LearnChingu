@@ -5,6 +5,7 @@ import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'onboarding/diagnostic_quiz.dart';
 import 'screens/question_service.dart';
+import 'screens/signup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
@@ -52,7 +53,7 @@ class LearnChinguApp extends StatelessWidget {
         '/login': (_) => const LoginScreen(),
         '/onboarding/diagnostic_quiz': (_) => const DiagnosticScreen(),
         '/onboarding/diagnostic_results': (_) => const DiagnosticResults(),
-        
+        '/signup': (_) => const SignUpScreen(),
       },
     );
   }
