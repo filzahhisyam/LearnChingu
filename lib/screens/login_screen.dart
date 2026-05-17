@@ -2,9 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chingu_text_field.dart';
+import '../services/auth_service.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final authService = AuthService();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,27 +71,40 @@ class LoginScreen extends StatelessWidget {
 
               const SizedBox(height: 36),
 
-              const ChinguTextField(
+              ChinguTextField(
                 label: 'Email',
                 hint: 'you@example.com',
+                controller: emailController,
               ),
 
               const SizedBox(height: 16),
 
-              const ChinguTextField(
+              ChinguTextField(
                 label: 'Password',
                 hint: '••••••••',
                 obscure: true,
+                controller: passwordController,
               ),
 
               const SizedBox(height: 28),
 
               ChinguButton(
                 label: 'Log in',
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  '/onboarding/diagnostic_quiz',
-                ),
+                onPressed: () async {
+                  final success = await authService.login(
+                    emailController.text.trim(),
+                    passwordController.text.trim(),
+                  );
+
+                  if (success) {
+                    Navigator.pushNamed(context, '/onboarding/diagnostic_quiz');
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Login failed. Please try again.')),
+                    );
+                  }
+
+                },
               ),
 
               const SizedBox(height: 20),

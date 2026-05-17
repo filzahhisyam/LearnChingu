@@ -7,6 +7,8 @@ import 'onboarding/diagnostic_quiz.dart';
 import 'screens/question_service.dart';
 import 'screens/signup_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'screens/main_page.dart';
+import 'screens/practice_screen.dart';
 
 void main() async {
     WidgetsFlutterBinding.ensureInitialized();
@@ -47,13 +49,16 @@ class LearnChinguApp extends StatelessWidget {
       title: 'Learn Chingu',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const LoginScreen(),
+      home: const DiagnosticScreen(),
       routes: {
         '/splash': (_) => const SplashScreen(),
         '/login': (_) => const LoginScreen(),
         '/onboarding/diagnostic_quiz': (_) => const DiagnosticScreen(),
         '/onboarding/diagnostic_results': (_) => const DiagnosticResults(),
         '/signup': (_) => const SignUpScreen(),
+        '/home': (_) => const HomeScreen(),
+        '/practice': (_) => const PracticeTopicScreen(),
+        // '/exam': (_) => const ExamScreen(),
       },
     );
   }

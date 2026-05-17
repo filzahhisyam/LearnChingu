@@ -2,10 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 import '../widgets/chingu_text_field.dart';
+import '../services/auth_service.dart'; // 2. Importing the AuthService
 // 1. Added missing imports (Adjust these paths if your file structure is different)
 
-class SignUpScreen extends StatelessWidget {
+
+
+class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
+
+  @override
+  State<SignUpScreen> createState() => _SignUpScreenState();
+}
+
+  class _SignUpScreenState extends State<SignUpScreen> {
+    final authService = AuthService();
+
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    final usernameController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+
+  @override
+void dispose() {
+  emailController.dispose();
+  passwordController.dispose();
+  usernameController.dispose();
+  confirmPasswordController.dispose();
+  super.dispose();
+}
 
   @override
   Widget build(BuildContext context) {
@@ -42,43 +66,53 @@ class SignUpScreen extends StatelessWidget {
 
               const SizedBox(height: 36),
 
-              const ChinguTextField(
+              ChinguTextField(
                 label: 'Email',
                 hint: 'you@example.com',
+                controller: emailController, // 3. Added controller
               ),
 
               const SizedBox(height: 16),
 
-              const ChinguTextField(
+              ChinguTextField(
                 label: 'Username',
                 hint: 'Enter your username',
+                controller: usernameController, // 3. Added controller
               ),
 
               const SizedBox(height: 16),
 
-              const ChinguTextField(
+              ChinguTextField(
                 label: 'Password',
                 hint: '••••••••',
                 obscure: true,
+                controller: passwordController,
               ),
 
               const SizedBox(height: 16),
 
-              const ChinguTextField(
+              ChinguTextField(
                 label: 'Confirm Password',
                 hint: '••••••••',
                 obscure: true,
+                controller: confirmPasswordController,
               ),
 
               const SizedBox(height: 28),
 
               ChinguButton(
-                label: 'Create Account',
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  '/login',
+                  label: 'Create Account',
+                  onPressed: () async {
+                    await authService.signUp(
+                      emailController.text,
+                      passwordController.text,
+                      usernameController.text,
+                    );
+
+                    Navigator.pushNamed(context, '/login');
+                  },
                 ),
-              ),
+              
             ], // Closes Column
           ), // Closes SingleChildScrollView
         ), // Closes SafeArea
