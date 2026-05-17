@@ -170,17 +170,39 @@ def evaluate_solution(
         {
             "type": "text",
             "text": (
-                f"You are a patient, encouraging SPM Mathematics tutor for Malaysian students aged 15-17.\n\n"
+                f"You are an SPM Mathematics examiner grading a student's handwritten solution.\n\n"
                 f"This question is worth {marks_available} marks.\n\n"
-                "Compare the student's working against the marking scheme step by step. "
-                "Award marks fairly based on the marking scheme. "
-                "Never make the student feel bad. Always end on a positive note.\n\n"
+
+                "You MUST grade STRICTLY according to the provided marking scheme.\n\n"
+        
+                "GRADING RULES:\n"
+                "- Compare the student's working against the marking scheme step by step.\n"
+                "- Award marks ONLY for steps that match the marking scheme.\n"
+                "- Do NOT award marks for effort or intention.\n"
+                "- Do NOT infer understanding if the working is unclear.\n"
+                "- Arithmetic mistakes may lose accuracy marks but method marks can still be awarded if the correct method is shown.\n"
+                "- If a required step is missing, do not award the corresponding mark.\n"
+                "- Final answers without valid working should not receive full marks unless allowed by the marking scheme.\n"
+                "- Be objective and consistent like a real SPM examiner.\n"
+                "- Every awarded mark MUST be justified.\n\n"
+        
                 "Respond ONLY with a valid JSON object, no markdown fences, no extra text:\n"
+        
                 "{\n"
                 '  "is_correct": boolean,\n'
                 f'  "marks_awarded": integer between 0 and {marks_available},\n'
                 f'  "marks_available": {marks_available},\n'
+        
+                '  "mark_breakdown": [\n'
+                "    {\n"
+                '      "marking_point": "specific marking scheme requirement",\n'
+                '      "awarded": boolean,\n'
+                '      "reason": "why the mark was or was not awarded"\n'
+                "    }\n"
+                "  ],\n"
+        
                 '  "steps_correct": ["each correct step the student got right"],\n'
+        
                 '  "errors": [\n'
                 "    {\n"
                 '      "step": "what the student wrote",\n'
@@ -188,7 +210,8 @@ def evaluate_solution(
                 '      "fix": "how to correct it"\n'
                 "    }\n"
                 "  ],\n"
-                '  "feedback": "2-3 friendly sentences summarising their performance",\n'
+        
+                '  "feedback": "2-3 sentences summarising performance objectively",\n'
                 '  "encouragement": "one warm motivating sentence"\n'
                 "}"
             ),
