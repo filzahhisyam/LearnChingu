@@ -97,6 +97,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
 
   List<DiagnosticQuestion> _questions = [];
   bool _loading = true;
+  bool _isErasing = false;
 
   Color _strokeColor = Colors.black87;
 
@@ -120,6 +121,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
   final List<_Stroke> _strokes = [];
   _Stroke? _currentStroke;
   double _strokeWidth = 3.0;
+  Color _savedColor = Colors.black;
 
   // Animation
   late AnimationController _slideController;
@@ -531,9 +533,11 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   color: AppColors.textSecondary)),
           ClipRRect(
           borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+          child: SizedBox(
+          height: 200,        // ✅ change this number to whatever fits
+          width: double.infinity,
           child: Image.network(
             _current.imageUrl,
-            width: double.infinity,
             fit: BoxFit.contain,
             headers: const {
               'Cache-Control': 'no-cache',
@@ -581,6 +585,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
             },
           ),
         ),
+          ),
       ],
     ),
   );
@@ -616,13 +621,15 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                   () => setState(() => _strokeWidth = 2.5)),
               const SizedBox(width: 8),
               _toolBtn(Icons.brush_rounded, 'Thick',
-                  () => setState(() => _strokeWidth = 5.0)),
+                  () => setState(() => _strokeWidth = 4.0)),
               const SizedBox(width: 10),
               _colorDot(Colors.black87),
               const SizedBox(width: 6),
               _colorDot(const Color(0xFF1565C0)),
               const SizedBox(width: 6),
               _colorDot(const Color(0xFFB71C1C)),
+              const SizedBox(width: 18),
+
               const Spacer(),
               GestureDetector(
                 onTap: () => setState(() {
@@ -632,7 +639,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                 }),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 6),
+                    horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(10),
@@ -645,15 +652,65 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                     Text('Clear',
                         style: GoogleFonts.outfit(
                             fontSize: 12,
-                            color: AppColors.textSecondary)),
-                  ]),
-                ),
-              ),
-            ],
-          ),
-        const SizedBox(height: 10),
+                            color: AppColors.textSecondary,
 
-        // Canvas
+                    ),
+            ),
+          ],
+        ),
+      ),
+    ),
+                    
+        const SizedBox(width: 12),
+
+        GestureDetector(
+      onTap: () => setState(() {
+        _isErasing = !_isErasing;
+
+        if (_isErasing) {
+          _savedColor = _strokeColor;
+          _strokeColor = Colors.white;
+          _strokeWidth = 16.0;
+        } else {
+          _strokeColor = _savedColor;
+          _strokeWidth = 3.0;
+        }
+      }),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: _isErasing ? AppColors.primary.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.auto_fix_normal,
+              size: 14,
+              color: _isErasing
+                  ? AppColors.primary
+                  : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'Eraser',
+              style: GoogleFonts.outfit(
+                fontSize: 12,
+                color: _isErasing
+                    ? AppColors.primary
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  ],
+),
+
+const SizedBox(height: 12),
+
         RepaintBoundary(
           key: _whiteboardKey,
           child: Container(
@@ -666,7 +723,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
                     ? const Color(0xFF4CAF50)
                     : _submitted
                         ? AppColors.border
-                        : AppColors.primaryDark,
+                        : AppColors.border,
                 width: 1.5,
               ),
               boxShadow: [
@@ -846,7 +903,7 @@ class _DiagnosticScreenState extends State<DiagnosticScreen>
           color: color,
           shape: BoxShape.circle,
           border: Border.all(
-            color: selected ? AppColors.primary : Colors.transparent,
+            color: selected ? const ui.Color.fromARGB(255, 235, 234, 234) : Colors.transparent,
             width: 2.5,
           ),
           boxShadow: [

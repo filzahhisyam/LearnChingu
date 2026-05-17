@@ -49,7 +49,7 @@ class LearnChinguApp extends StatelessWidget {
       title: 'Learn Chingu',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const DiagnosticScreen(),
+      home: const LoginScreen(),
       routes: {
         '/splash': (_) => const SplashScreen(),
         '/login': (_) => const LoginScreen(),

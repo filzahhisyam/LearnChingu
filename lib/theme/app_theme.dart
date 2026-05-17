@@ -21,7 +21,7 @@ class AppColors {
   // Neutral
   static const background = Color.fromARGB(255, 252, 252, 252);
   static const surface = Color(0xFFFFFFFF);
-  static const border = Color.fromARGB(255, 223, 221, 219);
+  static const border = Color.fromARGB(255, 187, 186, 185);
   static const textPrimary = Color(0xFF1E1E1E);
   static const textSecondary = Color(0xFF5A5A5A);
   static const textHint = Color(0xFFBDBDBD);
@@ -30,6 +30,7 @@ class AppColors {
 class AppAssets {
   // Define the path to your custom avatar PNG
   static const String chinguIcon = 'assets/images/1.png';
+  static const String namjaIcon = 'assets/images/3 (2).png';
 }
 
 class AppTheme {

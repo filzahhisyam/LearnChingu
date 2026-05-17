@@ -64,15 +64,17 @@ class ChinguTextField extends StatelessWidget {
   final String label;
   final String hint;
   final bool obscure;
+  final TextEditingController controller;
 
   const ChinguTextField({
     super.key,
     required this.label,
     required this.hint,
+    required this.controller,
     this.obscure = false,
   });
 
-  @override
+   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,14 +88,19 @@ class ChinguTextField extends StatelessWidget {
             letterSpacing: 0.8,
           ),
         ),
+
         const SizedBox(height: 6),
+
         TextFormField(
+          controller: controller,
           obscureText: obscure,
           style: GoogleFonts.nunito(
             fontSize: 14,
             color: AppColors.textPrimary,
           ),
-          decoration: InputDecoration(hintText: hint),
+          decoration: InputDecoration(
+            hintText: hint,
+          ),
         ),
       ],
     );
