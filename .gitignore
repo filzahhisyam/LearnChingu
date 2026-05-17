@@ -22,7 +22,43 @@ build/
 # IDE
 .vscode/
 .idea/
+*.iml
+*.ipr
+*.iws
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+
+# Miscellaneous
+*.class
+*.log
+*.swp
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Symbolication / obfuscation
+app.*.symbols
+app.*.map.json
+
+# Android build artifacts
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Vercel
+.vercel
